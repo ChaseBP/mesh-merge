@@ -1,74 +1,117 @@
 import json
-import sys
-from collections import defaultdict
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+SEMANTIC_REPORT_PATH = BASE_DIR / "outputs" / "semantic_scene_report.json"
+OUTPUT_MD_PATH = BASE_DIR / "outputs" / "CHANGELOG.md"
 
 
-def load_diffs(path):
-    with open(path, "r") as f:
+def load_report():
+    if not SEMANTIC_REPORT_PATH.exists():
+        raise FileNotFoundError(
+            "semantic_scene_report.json not found. Run Gemini reasoning first."
+        )
+
+    with open(SEMANTIC_REPORT_PATH, "r") as f:
         return json.load(f)
 
 
-def main(enriched_diff_path, output_path):
-    diffs = load_diffs(enriched_diff_path)
+def main():
+    report = load_report()
 
-    grouped = defaultdict(list)
-    for d in diffs:
-        grouped[d["object"]].append(d)
+    lines = ["# MeshMerge Change Log", ""]
 
-    lines = [
-        "# MeshMerge Change Log",
-        "",
-        "## Summary",
-        f"{len(diffs)} semantic change(s) detected between scene versions.",
-        "",
-        "## Details",
-    ]
+    # ---------------------
+    # Scene Summary
+    # ---------------------
+    summary = report.get("scene_summary", {})
+    lines.append("## Scene Summary")
 
-    for obj, changes in grouped.items():
-        bounds_changes = [c for c in changes if c["type"] == "BOUNDS_CHANGED"]
+    if summary:
+        lines.append(summary.get("description", "No description provided."))
+        lines.append("")
+        lines.append(
+            f"**Overall significance:** {
+                summary.get('overall_significance', 'unknown')
+            }"
+        )
+        lines.append("")
+    else:
+        lines.append("No high-level scene summary available.\n")
 
-        if bounds_changes:
-            axes = sorted({c["details"]["axis"] for c in bounds_changes})
-            visually_confirmed = all(
-                c.get("visual_confirmation") for c in bounds_changes
-            )
+    # ---------------------
+    # Events
+    # ---------------------
+    events = report.get("events", [])
 
-            if visually_confirmed:
-                axis_str = " and ".join(axes)
-                lines.append(
-                    f"- The silhouette of `{obj}` expanded along the {axis_str} axis, "
-                    f"with visible shape changes in the rendered view."
-                )
-            else:
-                for c in bounds_changes:
-                    axis = c["details"]["axis"]
-                    before = c["details"]["before_extent"]
-                    after = c["details"]["after_extent"]
-                    direction = "increased" if after > before else "decreased"
+    lines.append("## Events")
 
-                    lines.append(
-                        f"- The spatial extent of `{obj}` {direction} along the {
-                            axis
-                        } axis "
-                        f"(from {before:.2f} to {after:.2f})."
-                    )
+    if not events:
+        lines.append("No semantic events detected.\n")
+    else:
+        for event in events:
+            sig = event.get("significance", "unknown").upper()
+            interpretation = event.get("interpretation", "No description")
+            objects = ", ".join(event.get("objects", []))
 
-        # Other change types (future-safe)
-        for c in changes:
-            if c["type"] == "MATERIAL_CHANGED":
-                lines.append(f"- The material assignment of `{obj}` changed.")
-            if c["type"] == "TRANSFORM_CHANGED":
-                lines.append(f"- The object transform of `{obj}` was modified.")
+            lines.append(f"- **[{sig}]** {interpretation}")
 
-    with open(output_path, "w") as f:
+            if objects:
+                lines.append(f"  - Objects: {objects}")
+
+            axes = event.get("axes")
+            if axes:
+                lines.append(f"  - Axes affected: {', '.join(axes)}")
+
+            lines.append("")
+
+    # ---------------------
+    # Conflicts
+    # ---------------------
+    conflicts = report.get("conflicts", [])
+
+    if conflicts:
+        lines.append("## Conflicts")
+
+        for conflict in conflicts:
+            interpretation = conflict.get("interpretation", "Conflict detected")
+            objects = ", ".join(conflict.get("objects", []))
+            severity = conflict.get("severity", "unknown")
+
+            lines.append(f"- {interpretation}")
+
+            if objects:
+                lines.append(f"  - Objects: {objects}")
+
+            lines.append(f"  - Severity: {severity}")
+            lines.append("")
+
+    # ---------------------
+    # Object Summaries
+    # ---------------------
+    obj_summaries = report.get("object_summaries", [])
+
+    if obj_summaries:
+        lines.append("## Object Summaries")
+
+        for obj in obj_summaries:
+            name = obj.get("object", "unknown")
+            summary = obj.get("summary", "")
+            sig = obj.get("significance", "unknown")
+
+            lines.append(f"- **{name}** ({sig}): {summary}")
+
+    # ---------------------
+    # Write file
+    # ---------------------
+    OUTPUT_MD_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(OUTPUT_MD_PATH, "w") as f:
         f.write("\n".join(lines))
 
-    print(f"[MeshMerge] Vision-aware CHANGELOG.md written to {output_path}")
+    print("[MeshMerge] CHANGELOG.md generated from Gemini semantic report")
+    print(f"Location: {OUTPUT_MD_PATH}")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 3:
-        print("Usage: python changelog_generator.py enriched_diff.json CHANGELOG.md")
-        sys.exit(1)
-
-    main(sys.argv[1], sys.argv[2])
+    main()

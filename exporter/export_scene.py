@@ -1,14 +1,38 @@
 import json
 import os
+import sys
 
 import bpy
 from mathutils import Vector
 
 # -------------------------
-# CONFIG (safe to tweak)
+# ARG PARSING
 # -------------------------
 
-OUTPUT_DIR = bpy.path.abspath("//meshmerge_export")
+
+def get_output_dir():
+    """
+    Blender passes args after `--`
+    Example:
+    blender --python export_scene.py -- --out /some/path
+    """
+    argv = sys.argv
+
+    if "--" not in argv:
+        return bpy.path.abspath("//meshmerge_export")
+
+    idx = argv.index("--") + 1
+    args = argv[idx:]
+
+    if "--out" in args:
+        out_idx = args.index("--out") + 1
+        if out_idx < len(args):
+            return args[out_idx]
+
+    return bpy.path.abspath("//meshmerge_export")
+
+
+OUTPUT_DIR = get_output_dir()
 SCENE_JSON_PATH = os.path.join(OUTPUT_DIR, "scene.json")
 RENDER_PATH = os.path.join(OUTPUT_DIR, "viewport.png")
 
@@ -21,12 +45,10 @@ RENDER_RES_Y = 1080
 
 
 def ensure_output_dir(path):
-    if not os.path.exists(path):
-        os.makedirs(path, exist_ok=True)
+    os.makedirs(path, exist_ok=True)
 
 
 def compute_world_bounds(obj):
-    """Compute world-space AABB for a mesh object."""
     if obj.type != "MESH" or not obj.data:
         return None
 
@@ -72,14 +94,13 @@ def get_material_name(obj):
 
 def export_scene_json():
     scene = bpy.context.scene
-
     data = {"scene": scene.name, "objects": [], "lights": [], "cameras": []}
 
     for obj in scene.objects:
         if obj.type == "MESH":
             bounds = compute_world_bounds(obj)
-
             mesh_data = obj.data
+
             data["objects"].append(
                 {
                     "name": obj.name,
@@ -122,7 +143,7 @@ def export_scene_json():
     with open(SCENE_JSON_PATH, "w") as f:
         json.dump(data, f, indent=2)
 
-    print(f"[MeshMerge] scene.json written to {SCENE_JSON_PATH}")
+    print(f"[MeshMerge] scene.json → {SCENE_JSON_PATH}")
 
 
 # -------------------------
@@ -139,13 +160,12 @@ def render_viewport():
     scene.render.filepath = RENDER_PATH
     scene.render.image_settings.file_format = "PNG"
 
-    # Ensure there is an active camera
     if scene.camera is None:
-        print("[MeshMerge] No active camera found. Render skipped.")
+        print("[MeshMerge] No active camera. Render skipped.")
         return
 
     bpy.ops.render.render(write_still=True)
-    print(f"[MeshMerge] viewport.png written to {RENDER_PATH}")
+    print(f"[MeshMerge] viewport.png → {RENDER_PATH}")
 
 
 # -------------------------

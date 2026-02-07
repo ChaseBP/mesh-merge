@@ -1,4 +1,28 @@
-.env 
+# Environment files
+.env
+.env.*
+
+# Virtual environments
 venv/
+.venv/
+
+# Python bytecode / caches
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Build / distribution artifacts
+build/
+dist/
+*.egg-info/
+
+# Editor / OS files
+.DS_Store
+.idea/
+.vscode/
+
+# Project outputs
+outputs/

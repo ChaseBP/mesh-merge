@@ -1,11 +1,15 @@
 import json
 import sys
+from pathlib import Path
+
+from PIL import Image
 
 # -------------------------
 # CONFIG
 # -------------------------
 
-MIN_OVERLAP_RATIO = 0.15  # conservative: require 15% overlap
+MIN_OVERLAP_RATIO = 0.15  # require 15% overlap
+
 
 # -------------------------
 # HELPERS
@@ -15,6 +19,11 @@ MIN_OVERLAP_RATIO = 0.15  # conservative: require 15% overlap
 def load_json(path):
     with open(path, "r") as f:
         return json.load(f)
+
+
+def get_image_size(image_path):
+    with Image.open(image_path) as img:
+        return img.size  # (width, height)
 
 
 def rect_overlap(a, b):
@@ -31,19 +40,18 @@ def rect_area(r):
 
 def approximate_projection(bounds, image_width, image_height):
     """
-    Very conservative v0 projection:
-    - Assumes camera is fixed and roughly centered
-    - Maps world X/Z bounds to screen X/Y
+    Conservative projection heuristic:
+    Maps world X/Z bounds to screen X/Y.
+    Assumes centered camera.
     """
 
-    # Normalize world bounds (heuristic, not exact)
     world_width = bounds["max"][0] - bounds["min"][0]
     world_height = bounds["max"][2] - bounds["min"][2]
 
     center_x = image_width // 2
     center_y = image_height // 2
 
-    scale = 40  # heuristic pixels per world unit (safe, conservative)
+    scale = 40  # pixels per world unit (heuristic)
 
     half_w = int((world_width * scale) / 2)
     half_h = int((world_height * scale) / 2)
@@ -61,10 +69,12 @@ def approximate_projection(bounds, image_width, image_height):
 # -------------------------
 
 
-def main(diff_path, scene_path, regions_path, image_width, image_height, out_path):
+def main(diff_path, scene_path, regions_path, image_path, out_path):
     diffs = load_json(diff_path)
     scene = load_json(scene_path)
     regions = load_json(regions_path)
+
+    image_width, image_height = get_image_size(image_path)
 
     objects = {o["name"]: o for o in scene.get("objects", [])}
 
@@ -90,26 +100,30 @@ def main(diff_path, scene_path, regions_path, image_width, image_height, out_pat
         d["visual_confirmation"] = visual_confirmed
         enriched.append(d)
 
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+
     with open(out_path, "w") as f:
         json.dump(enriched, f, indent=2)
 
     print(f"[MeshMerge] Vision correlation complete → {out_path}")
 
 
+# -------------------------
+# ENTRY
+# -------------------------
+
 if __name__ == "__main__":
-    if len(sys.argv) != 7:
+    if len(sys.argv) != 6:
         print(
             "Usage: python vision_correlator.py "
-            "diff.json scene_v2.json regions.json "
-            "image_width image_height output.json"
+            "diff.json scene_v2.json regions.json viewport.png output.json"
         )
         sys.exit(1)
 
     main(
-        sys.argv[1],
-        sys.argv[2],
-        sys.argv[3],
-        int(sys.argv[4]),
-        int(sys.argv[5]),
-        sys.argv[6],
+        sys.argv[1],  # diff.json
+        sys.argv[2],  # scene_v2.json
+        sys.argv[3],  # regions.json
+        sys.argv[4],  # viewport.png
+        sys.argv[5],  # output.json
     )

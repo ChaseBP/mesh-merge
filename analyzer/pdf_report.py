@@ -123,9 +123,9 @@ def main():
     if HEATMAP.exists():
         c.setFont("Helvetica-Bold", 12)
         c.drawString(40, y, "Change Heatmap")
-        y -= 10
-        draw_image_scaled(c, HEATMAP, 40, y, page_w - 80)
-        y -= 180
+        y -= 14
+        heatmap_height = draw_image_scaled(c, HEATMAP, 40, y, page_w - 80)
+        y -= heatmap_height + 30
 
     # -------------------------
     # Events

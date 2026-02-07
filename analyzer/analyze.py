@@ -6,12 +6,17 @@ from pathlib import Path
 # PATH SETUP
 # ---------------------------------------
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent        # /mesh-merge/analyzer
+PROJECT_ROOT = BASE_DIR.parent                    # /mesh-merge
 
-INPUT_V1 = BASE_DIR / "inputs" / "v1"
-INPUT_V2 = BASE_DIR / "inputs" / "v2"
+BLENDER_EXE = r"C:\Program Files\Blender Foundation\Blender 5.0\blender.exe"
 
-OUTPUT_DIR = BASE_DIR / "outputs"
+EXPORT_SCRIPT = PROJECT_ROOT / "exporter" / "export_scene.py"
+
+INPUT_V1 = PROJECT_ROOT / "inputs" / "v1"
+INPUT_V2 = PROJECT_ROOT / "inputs" / "v2"
+
+OUTPUT_DIR = PROJECT_ROOT / "outputs"
 VISION_DIR = OUTPUT_DIR / "vision"
 
 SCENE_V1 = INPUT_V1 / "scene.json"
@@ -30,7 +35,6 @@ CHANGELOG_MD = OUTPUT_DIR / "CHANGELOG.md"
 # ---------------------------------------
 # HELPERS
 # ---------------------------------------
-
 
 def run_step(name, cmd):
     print(f"\n=== {name} ===")
@@ -52,7 +56,7 @@ def run_and_capture(name, cmd, output_path):
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write(result.stdout)
 
     print(f"[OK] wrote {output_path}")
@@ -65,29 +69,50 @@ def assert_exists(path):
 
 
 # ---------------------------------------
-# MAIN PIPELINE
+# BLENDER EXPORT
 # ---------------------------------------
 
+def export_blend(blend_path: Path, target_dir: Path):
+    print(f"\n=== Exporting {blend_path.name} → {target_dir} ===")
 
-def main():
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    cmd = [
+        BLENDER_EXE,
+        "--background",
+        str(blend_path),
+        "--python",
+        str(EXPORT_SCRIPT),
+        "--",
+        "--out",
+        str(target_dir),
+    ]
+
+    result = subprocess.run(cmd)
+
+    if result.returncode != 0:
+        print("[ERROR] Blender export failed")
+        sys.exit(1)
+
+
+# ---------------------------------------
+# PIPELINE
+# ---------------------------------------
+
+def run_pipeline():
     print("\nMeshMerge pipeline starting...\n")
 
-    # -----------------------------------
-    # Check required inputs exist
-    # -----------------------------------
-    for p in [SCENE_V1, SCENE_V2, IMG_V1, IMG_V2]:
-        if not p.exists():
-            print(f"[ERROR] Missing required input: {p}")
-            sys.exit(1)
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    VISION_DIR.mkdir(exist_ok=True)
 
-    # -----------------------------------
-    # Step 1 — semantic diff
-    # -----------------------------------
+    # -------------------------
+    # Semantic diff
+    # -------------------------
     run_and_capture(
         "Semantic Diff",
         [
             sys.executable,
-            "analyzer/semantic_diff.py",
+            str(BASE_DIR / "semantic_diff.py"),
             str(SCENE_V1),
             str(SCENE_V2),
         ],
@@ -96,14 +121,14 @@ def main():
 
     assert_exists(DIFF_JSON)
 
-    # -----------------------------------
-    # Step 2 — image diff
-    # -----------------------------------
+    # -------------------------
+    # Image diff
+    # -------------------------
     run_step(
         "Image Diff",
         [
             sys.executable,
-            "analyzer/image_diff.py",
+            str(BASE_DIR / "image_diff.py"),
             str(IMG_V1),
             str(IMG_V2),
             str(VISION_DIR),
@@ -112,15 +137,14 @@ def main():
 
     assert_exists(REGIONS_JSON)
 
-    # -----------------------------------
-    # Step 3 — vision correlation
-    # (image size auto-detected inside script)
-    # -----------------------------------
+    # -------------------------
+    # Vision correlation
+    # -------------------------
     run_step(
         "Vision Correlation",
         [
             sys.executable,
-            "analyzer/vision_correlator.py",
+            str(BASE_DIR / "vision_correlator.py"),
             str(DIFF_JSON),
             str(SCENE_V2),
             str(REGIONS_JSON),
@@ -131,26 +155,43 @@ def main():
 
     assert_exists(ENRICHED_JSON)
 
-    # -----------------------------------
-    # Step 4 — Gemini reasoning
-    # -----------------------------------
+    # -------------------------
+    # Gemini reasoning
+    # -------------------------
     run_step(
         "Gemini Reasoning",
-        [sys.executable, "analyzer/gemini_reasoning.py"],
+        [sys.executable, str(BASE_DIR / "gemini_reasoning.py")],
     )
 
     assert_exists(SEMANTIC_REPORT)
 
-    # -----------------------------------
-    # Step 5 — changelog generation
-    # (Gemini-driven)
-    # -----------------------------------
+    # -------------------------
+    # Changelog
+    # -------------------------
     run_step(
         "Changelog Generation",
-        [sys.executable, "analyzer/changelog_generator.py"],
+        [sys.executable, str(BASE_DIR / "changelog_generator.py")],
     )
 
     assert_exists(CHANGELOG_MD)
+
+    # -------------------------
+    # Visual report (required for PDF)
+    # -------------------------
+    run_step(
+        "Visual Report",
+        [sys.executable, str(BASE_DIR / "visual_report.py")],
+    )
+
+    # -------------------------
+    # PDF (optional)
+    # -------------------------
+    pdf_script = BASE_DIR / "pdf_report.py"
+    if pdf_script.exists():
+        run_step(
+            "PDF Report",
+            [sys.executable, str(pdf_script)],
+        )
 
     print("\nPipeline complete.")
     print("Outputs available in /outputs\n")
@@ -161,4 +202,24 @@ def main():
 # ---------------------------------------
 
 if __name__ == "__main__":
-    main()
+
+    if len(sys.argv) != 3:
+        print("\nUsage:")
+        print("python analyzer/analyze.py before.blend after.blend\n")
+        sys.exit(1)
+
+    before_blend = Path(sys.argv[1]).resolve()
+    after_blend = Path(sys.argv[2]).resolve()
+
+    if not before_blend.exists():
+        print("Missing:", before_blend)
+        sys.exit(1)
+
+    if not after_blend.exists():
+        print("Missing:", after_blend)
+        sys.exit(1)
+
+    export_blend(before_blend, INPUT_V1)
+    export_blend(after_blend, INPUT_V2)
+
+    run_pipeline()

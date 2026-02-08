@@ -74,7 +74,8 @@ def main():
         lines.append("## Conflicts")
 
         for conflict in conflicts:
-            interpretation = conflict.get("interpretation", "Conflict detected")
+            interpretation = conflict.get(
+                "interpretation", "Conflict detected")
             objects = ", ".join(conflict.get("objects", []))
             severity = conflict.get("severity", "unknown")
 

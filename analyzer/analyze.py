@@ -153,6 +153,14 @@ def run_pipeline():
         ],
     )
 
+    # -------------------------
+    # Ambiguity detection
+    # -------------------------
+    run_step(
+        "Ambiguity Detection",
+        [sys.executable, "analyzer/ambiguity_detector.py"],
+    )
+
     assert_exists(ENRICHED_JSON)
 
     # -------------------------

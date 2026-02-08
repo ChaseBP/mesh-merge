@@ -30,10 +30,13 @@ def main():
     if summary:
         lines.append(summary.get("description", "No description provided."))
         lines.append("")
+
+        dominant = summary.get("dominant_change_type")
+        if dominant:
+            lines.append(f"**Dominant change type:** {dominant}")
+
         lines.append(
-            f"**Overall significance:** {
-                summary.get('overall_significance', 'unknown')
-            }"
+            f"**Overall significance:** {summary.get('overall_significance', 'unknown')}"
         )
         lines.append("")
     else:
@@ -43,7 +46,6 @@ def main():
     # Events
     # ---------------------
     events = report.get("events", [])
-
     lines.append("## Events")
 
     if not events:
@@ -63,19 +65,44 @@ def main():
             if axes:
                 lines.append(f"  - Axes affected: {', '.join(axes)}")
 
+            justification = event.get("justification")
+            if justification:
+                lines.append(f"  - Evidence: {justification}")
+
+            lines.append("")
+
+    # ---------------------
+    # Resolved Ambiguities ⭐ HERO SECTION
+    # ---------------------
+    resolved = report.get("resolved_ambiguities", [])
+    if resolved:
+        lines.append("## Resolved Ambiguities")
+
+        for r in resolved:
+            typ = r.get("type", "unknown")
+            obj = r.get("object")
+            explanation = r.get("explanation", "")
+            conf = r.get("confidence", "unknown")
+
+            if obj:
+                lines.append(f"- **{typ}** ({obj}) — {conf}")
+            else:
+                lines.append(f"- **{typ}** — {conf}")
+
+            if explanation:
+                lines.append(f"  - {explanation}")
+
             lines.append("")
 
     # ---------------------
     # Conflicts
     # ---------------------
     conflicts = report.get("conflicts", [])
-
     if conflicts:
         lines.append("## Conflicts")
 
         for conflict in conflicts:
-            interpretation = conflict.get(
-                "interpretation", "Conflict detected")
+            interpretation = conflict.get("interpretation", "Conflict detected")
             objects = ", ".join(conflict.get("objects", []))
             severity = conflict.get("severity", "unknown")
 
@@ -91,7 +118,6 @@ def main():
     # Object Summaries
     # ---------------------
     obj_summaries = report.get("object_summaries", [])
-
     if obj_summaries:
         lines.append("## Object Summaries")
 
@@ -107,7 +133,7 @@ def main():
     # ---------------------
     OUTPUT_MD_PATH.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(OUTPUT_MD_PATH, "w") as f:
+    with open(OUTPUT_MD_PATH, "w", encoding="utf-8") as f:
         f.write("\n".join(lines))
 
     print("[MeshMerge] CHANGELOG.md generated from Gemini semantic report")
@@ -116,3 +142,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

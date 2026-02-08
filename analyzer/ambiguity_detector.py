@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from math import isclose
+from math import isclose, sqrt
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -26,6 +26,13 @@ def load_json(p):
 def get_camera(scene):
     cams = scene.get("cameras", [])
     return cams[0] if cams else None
+
+
+def camera_distance(cam):
+    if not cam:
+        return None
+    x, y, z = cam.get("location", [0, 0, 0])
+    return sqrt(x * x + y * y + z * z)
 
 
 def camera_moved(cam1, cam2):
@@ -59,7 +66,7 @@ def lighting_changed(scene1, scene2):
         return True
 
     for a, b in zip(l1, l2):
-        if a.get("energy") != b.get("energy"):
+        if a.get("intensity") != b.get("intensity"):
             return True
         if a.get("color") != b.get("color"):
             return True
@@ -90,6 +97,29 @@ def main():
     light_change = lighting_changed(scene1, scene2)
 
     total_area = sum(r.get("area", 0) for r in regions)
+
+    # -------------------------------------------------
+    # CAMERA DISTANCE METRICS 
+    # -------------------------------------------------
+    dist1 = camera_distance(cam1)
+    dist2 = camera_distance(cam2)
+
+    distance_delta = None
+    distance_pct = None
+
+    if dist1 is not None and dist2 is not None:
+        distance_delta = round(dist2 - dist1, 4)
+        if dist1 > 0:
+            distance_pct = round(((dist2 - dist1) / dist1) * 100, 2)
+
+    # -------------------------------------------------
+    # SCALE CHANGES TRACKING 
+    # -------------------------------------------------
+    scale_changes = [
+        d for d in diffs
+        if d.get("type") == "TRANSFORM_CHANGED"
+        and d.get("details", {}).get("transform") == "scale"
+    ]
 
     # -------------------------------------------------
     # per-diff ambiguity detection
@@ -176,9 +206,31 @@ def main():
                     }
                 )
 
-    # -------------------------------------------------
+    # -------------------------------
+    # SCALE vs CAMERA CONTRADICTION 
+    # -------------------------------
+    if scale_changes and cam_changed:
+        ambiguities.append(
+            {
+                "type": "SCALE_CAMERA_CONTRADICTION",
+                "objects": [d["object"] for d in scale_changes],
+                "camera_distance_before": dist1,
+                "camera_distance_after": dist2,
+                "camera_distance_delta": distance_delta,
+                "camera_distance_change_pct": distance_pct,
+                "reason": "Object scale changed while camera distance also changed",
+                "possible_causes": [
+                    "object_scaled",
+                    "camera_moved",
+                    "perceptual_cancellation",
+                ],
+                "confidence": "high",
+            }
+        )
+
+    # -------------------------------
     # PERCEPTUAL ONLY CHANGE
-    # -------------------------------------------------
+    # -------------------------------
     if not diffs and total_area > VISUAL_CHANGE_AREA_THRESHOLD:
         ambiguities.append(
             {

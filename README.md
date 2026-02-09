@@ -190,7 +190,7 @@ Example:
 
 ```bash
 git clone https://github.com/ChaseBP/mesh-merge
-cd meshmerge
+cd mesh-merge
 ```
 
 
@@ -307,4 +307,5 @@ And that’s something Git never could.
 Star the repo.
 Share it with 3D devs.
 Break it. Improve it. Extend it.
+
 

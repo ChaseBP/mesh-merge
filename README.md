@@ -16,7 +16,7 @@
 
 ---
 
-### 📺 [Watch the Full Walkthrough](https://www.youtube.com/watch?v=demo-link)
+### 📺 [Watch the Full Walkthrough](https://www.youtube.com/watch?v=vLYj7rjWTIE)
 
 
 **🏆 Built for Gemini 3 Hackathon**
@@ -307,3 +307,4 @@ And that’s something Git never could.
 Star the repo.
 Share it with 3D devs.
 Break it. Improve it. Extend it.
+
